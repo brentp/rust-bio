@@ -31,6 +31,7 @@ use anyhow::Context;
 use bio_types::annot;
 use bio_types::annot::loc::Loc;
 use bio_types::strand;
+use csv::StringRecord;
 
 /// A BED reader.
 #[derive(Debug)]
@@ -63,6 +64,19 @@ impl<R: io::Read> Reader<R> {
     pub fn records(&mut self) -> Records<'_, R> {
         Records {
             inner: self.inner.deserialize(),
+        }
+    }
+
+    /// Return the next record
+    pub fn next(&mut self) -> Option<csv::Result<Record>> {
+        let mut record = StringRecord::new();
+        match self.inner.read_record(&mut record) {
+            Ok(true) => {
+                let r = record.deserialize::<Record>(None);
+                Some(r)
+            }
+            Ok(false) => None,
+            Err(e) => Some(Err(e)),
         }
     }
 }
@@ -418,6 +432,30 @@ mod tests {
             assert_eq!(record.name().expect("Error reading name"), names[i]);
             assert_eq!(record.score().expect("Error reading score"), scores[i]);
         }
+    }
+
+    #[test]
+    fn test_reader_next() {
+        let mut reader = Reader::new(BED_FILE);
+        let record = reader
+            .next()
+            .expect("Error reading record")
+            .expect("Error reading record");
+        assert_eq!(record.chrom(), "1");
+        assert_eq!(record.start(), 5);
+        assert_eq!(record.end(), 5000);
+        assert_eq!(record.name().expect("Error reading name"), "name1");
+        assert_eq!(record.score().expect("Error reading score"), "up");
+
+        let record2 = reader
+            .next()
+            .expect("Error reading 2nd record")
+            .expect("Error reading 2nd record");
+        assert_eq!(record2.chrom(), "2");
+        assert_eq!(record2.start(), 3);
+        assert_eq!(record2.end(), 5005);
+        assert_eq!(record2.name().expect("Error reading name"), "name2");
+        assert_eq!(record2.score().expect("Error reading score"), "up");
     }
 
     #[test]
